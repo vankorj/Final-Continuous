@@ -14,13 +14,21 @@ pipeline {
         REPORT_DIR = "${env.WORKSPACE}/zap_reports"
     }
 
+    options {
+        timestamps()
+        ansiColor('xterm')
+        skipDefaultCheckout()
+    }
+
     stages {
 
-        stage('Cloning Git') {
-            steps { checkout scm }
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
         }
 
-        stage('SAST-TEST') {
+        stage('SAST - Snyk') {
             steps {
                 script {
                     def snykInstalled = false
@@ -28,7 +36,7 @@ pipeline {
                         tool name: 'Snyk-installations', type: 'io.snyk.jenkins.tools.SnykInstallation'
                         snykInstalled = true
                     } catch (err) {
-                        echo "Snyk installation not found. Skipping SAST-TEST."
+                        echo "Snyk not configured. Skipping SAST."
                     }
 
                     if (snykInstalled) {
@@ -53,7 +61,7 @@ pipeline {
                             sh """
                                 ${scannerHome}/bin/sonar-scanner \
                                 -Dsonar.projectKey=final \
-                                -Dsonar.sources=. 
+                                -Dsonar.sources=.
                             """
                         }
                     }
@@ -61,10 +69,10 @@ pipeline {
             }
         }
 
-        stage('BUILD-AND-TAG') {
+        stage('Build Docker Image') {
             steps {
                 script {
-                    echo "Building Docker image ${IMAGE_NAME}..."
+                    echo "Building Docker image ${IMAGE_NAME}"
                     def app = docker.build("${IMAGE_NAME}")
                     app.tag("latest")
                     env.IMAGE_ID = "${IMAGE_NAME}:latest"
@@ -72,10 +80,10 @@ pipeline {
             }
         }
 
-        stage('POST-TO-DOCKERHUB') {
+        stage('Push to DockerHub') {
             steps {
                 script {
-                    echo "Pushing to DockerHub..."
+                    echo "Pushing ${IMAGE_NAME}:latest to DockerHub"
                     docker.withRegistry('https://registry.hub.docker.com', "${DOCKERHUB_CREDENTIALS}") {
                         docker.image("${IMAGE_NAME}:latest").push()
                     }
@@ -83,11 +91,10 @@ pipeline {
             }
         }
 
-        stage("SECURITY-IMAGE-SCANNER") {
+        stage('Trivy Image Scan') {
             steps {
                 script {
-                    echo "Running Trivy vulnerability scan..."
-
+                    echo "Running Trivy scan..."
                     catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
                         sh """
                             docker run --rm -v \$(pwd):/workspace aquasec/trivy:latest image \
@@ -97,7 +104,6 @@ pipeline {
                             --severity ${TRIVY_SEVERITY} \
                             ${IMAGE_NAME}
                         """
-
                         sh """
                             docker run --rm -v \$(pwd):/workspace aquasec/trivy:latest image \
                             --exit-code 0 \
@@ -113,25 +119,17 @@ pipeline {
             }
         }
 
-        stage("Summarize Trivy Findings") {
+        stage('Trivy Summary') {
             steps {
                 script {
                     catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-
                         if (!fileExists("trivy-report.json")) {
                             echo "No Trivy report found."
                             return
                         }
 
-                        def highCount = sh(
-                            script: "grep -o '\"Severity\": \"HIGH\"' trivy-report.json | wc -l",
-                            returnStdout: true
-                        ).trim()
-
-                        def criticalCount = sh(
-                            script: "grep -o '\"Severity\": \"CRITICAL\"' trivy-report.json | wc -l",
-                            returnStdout: true
-                        ).trim()
+                        def highCount = sh(script: "grep -o '\"Severity\": \"HIGH\"' trivy-report.json | wc -l", returnStdout: true).trim()
+                        def criticalCount = sh(script: "grep -o '\"Severity\": \"CRITICAL\"' trivy-report.json | wc -l", returnStdout: true).trim()
 
                         echo "Trivy Summary → HIGH: ${highCount}, CRITICAL: ${criticalCount}"
                     }
@@ -139,11 +137,10 @@ pipeline {
             }
         }
 
-        stage('DAST') {
+        stage('DAST - OWASP ZAP') {
             steps {
                 script {
-                    echo "Running OWASP ZAP DAST scan..."
-
+                    echo "Running OWASP ZAP scan..."
                     sh "mkdir -p ${REPORT_DIR}"
 
                     catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
@@ -161,11 +158,10 @@ pipeline {
             }
         }
 
-        stage('DEPLOYMENT') {
+        stage('Deploy') {
             steps {
                 script {
                     echo "Deploying with docker-compose..."
-
                     catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
                         sh """
                             docker-compose down || true
@@ -180,7 +176,6 @@ pipeline {
 
     post {
         always {
-
             publishHTML(target: [
                 reportName: 'Trivy Image Security Report',
                 reportDir: '.',
