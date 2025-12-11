@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  gameapptestauso123:
+  finaltestauso123:
     image: finalimage:latest
     build: .
     container_name: finalautotest123
@@ -11,4 +11,4 @@ services:
       - PORT=3000
     volumes:
       - ./app:/app
-    command: ["node", "app.js"]
+    command: ["node", "index.js"]
