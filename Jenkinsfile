@@ -121,10 +121,11 @@ pipeline {
                             --exit-code 0 \
                             --format template \
                             --template "@/contrib/html.tpl" \
-                            --output /workspace/trivy-report.html \
+                            --output "/workspace/trivy-report.html" \
                             ${IMAGE_NAME}
                         """
                     }
+
                     archiveArtifacts artifacts: "trivy-report.json,trivy-report.html", allowEmptyArchive: true
                 }
             }
@@ -134,10 +135,10 @@ pipeline {
             steps {
                 script {
                     catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                        if (!fileExists("trivy-report.json")) {
-                            echo "No Trivy report."
-                            return
-                        }
+                        //if (!fileExists("trivy-report.json")) {
+                        //    echo "No Trivy report."
+                        //    return
+                        //}
 
                         def highCount = sh(
                             script: "grep -o '\"Severity\": \"HIGH\"' trivy-report.json | wc -l",
@@ -178,7 +179,8 @@ pipeline {
                             -r ${REPORT_HTML} -J ${REPORT_JSON} || true
                         """
                     }
-                    archiveArtifacts artifacts: "zap_reports/*", allowEmptyArchive: true
+                    sh 'ls -R zap_reports'
+                    archiveArtifacts artifacts: "zap_reports/**/*", allowEmptyArchive: true
                 }
             }
         }
