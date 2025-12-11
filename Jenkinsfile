@@ -108,23 +108,24 @@ pipeline {
                     catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
                         // JSON report
                         sh """
-                        docker run --rm -v $WORKSPACE:/workspace aquasec/trivy:latest image \
-                        --exit-code 0 \
-                        --format json \
-                        --output /workspace/trivy-report.json \
-                        --severity HIGH,CRITICAL vankorj/finalimage
+                            docker run --rm -v \$(pwd):/workspace aquasec/trivy:latest image \
+                            --exit-code 0 \
+                            --format json \
+                            --output /workspace/trivy-report.json \
+                            --severity ${TRIVY_SEVERITY} \
+                            ${IMAGE_NAME}
                         """
-
+                        // HTML report
                         sh """
-                        docker run --rm -v $WORKSPACE:/workspace aquasec/trivy:latest image \
-                        --exit-code 0 \
-                        --format template \
-                        --template @/contrib/html.tpl \
-                        --output /workspace/trivy-report.html \
-                        vankorj/finalimage
+                            docker run --rm -v \$(pwd):/workspace aquasec/trivy:latest image \
+                            --exit-code 0 \
+                            --format template \
+                            --template "@/contrib/html.tpl" \
+                            --output /workspace/trivy-report.html \
+                            ${IMAGE_NAME}
                         """
                     }
-                    archiveArtifacts artifacts: "${env.WORKSPACE}/trivy-report.json,${env.WORKSPACE}/trivy-report.html", allowEmptyArchive: true
+                    archiveArtifacts artifacts: "trivy-report.json,trivy-report.html", allowEmptyArchive: true
                 }
             }
         }
@@ -170,15 +171,14 @@ pipeline {
                     sh "mkdir -p ${REPORT_DIR}"
                     catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
                         sh """
-                        docker run --rm --user root --network host \
-                        -v ${REPORT_DIR}:/zap/wrk \
-                        -t ${ZAP_IMAGE} zap-baseline.py \
-                        -t ${TARGET_URL} \
-                        -r ${REPORT_DIR}/zap_report.html \
-                        -J ${REPORT_DIR}/zap_report.json || true
+                            docker run --rm --user root --network host \
+                            -v ${REPORT_DIR}:/zap/wrk \
+                            -t ${ZAP_IMAGE} zap-baseline.py \
+                            -t ${TARGET_URL} \
+                            -r ${REPORT_HTML} -J ${REPORT_JSON} || true
                         """
                     }
-                    archiveArtifacts artifacts: "${REPORT_DIR}/*.html,${REPORT_DIR}/*.json", allowEmptyArchive: true
+                    archiveArtifacts artifacts: "zap_reports/*", allowEmptyArchive: true
                 }
             }
         }
