@@ -79,36 +79,64 @@ pipeline {
         stage('Push to DockerHub') {
             steps {
                 script {
-                    docker.withRegistry('https://registry.hub.docker.com', 'dockerhub-creds') {
+                    docker.withRegistry('https://registry.hub.docker.com', 'docker-id') {
                         sh 'docker push vankorj/finalimage:latest'
                     }
                 }
             }
         }
 
-        stage('Trivy Image Scan') {
+        stage("SECURITY-IMAGE-SCANNER") {
             steps {
                 script {
-                    // JSON report
-                    sh '''
-                    docker run --rm -v $WORKSPACE:/workspace aquasec/trivy:latest image \
-                    --exit-code 0 --format json --output /workspace/trivy-report.json \
-                    --severity HIGH,CRITICAL vankorj/finalimage
-                    '''
-
-                    // HTML report
-                    sh '''
-                    docker run --rm -v $WORKSPACE:/workspace aquasec/trivy:latest image \
-                    --exit-code 0 --format template --template @/contrib/html.tpl \
-                    --output /workspace/trivy-report.html vankorj/finalimage
-                    '''
+                    echo "Running Trivy scan..."
+                    catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                        // JSON report
+                        sh """
+                            docker run --rm -v \$(pwd):/workspace aquasec/trivy:latest image \
+                            --exit-code 0 \
+                            --format json \
+                            --output /workspace/trivy-report.json \
+                            --severity ${TRIVY_SEVERITY} \
+                            ${IMAGE_NAME}
+                        """
+                        // HTML report
+                        sh """
+                            docker run --rm -v \$(pwd):/workspace aquasec/trivy:latest image \
+                            --exit-code 0 \
+                            --format template \
+                            --template "@/contrib/html.tpl" \
+                            --output /workspace/trivy-report.html \
+                            ${IMAGE_NAME}
+                        """
+                    }
+                    archiveArtifacts artifacts: "trivy-report.json,trivy-report.html", allowEmptyArchive: true
                 }
             }
         }
 
-        stage('Archive Trivy Reports') {
+        stage("Summarize Trivy Findings") {
             steps {
-                archiveArtifacts artifacts: 'trivy-report.json,trivy-report.html', allowEmptyArchive: true
+                script {
+                    catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                        if (!fileExists("trivy-report.json")) {
+                            echo "No Trivy report."
+                            return
+                        }
+
+                        def highCount = sh(
+                            script: "grep -o '\"Severity\": \"HIGH\"' trivy-report.json | wc -l",
+                            returnStdout: true
+                        ).trim()
+
+                        def criticalCount = sh(
+                            script: "grep -o '\"Severity\": \"CRITICAL\"' trivy-report.json | wc -l",
+                            returnStdout: true
+                        ).trim()
+
+                        echo "Trivy Findings Summary - HIGH: ${highCount}, CRITICAL: ${criticalCount}"
+                    }
+                }
             }
         }
 
