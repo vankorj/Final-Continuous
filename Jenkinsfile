@@ -108,21 +108,20 @@ pipeline {
                     catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
                         // JSON report
                         sh """
-                        docker run --rm -v ${env.WORKSPACE}:/workspace aquasec/trivy:latest image \
+                        docker run --rm -v $WORKSPACE:/workspace aquasec/trivy:latest image \
                         --exit-code 0 \
                         --format json \
                         --output /workspace/trivy-report.json \
-                        --severity ${TRIVY_SEVERITY} \
-                        ${IMAGE_NAME}
+                        --severity HIGH,CRITICAL vankorj/finalimage
                         """
 
                         sh """
-                        docker run --rm -v ${env.WORKSPACE}:/workspace aquasec/trivy:latest image \
+                        docker run --rm -v $WORKSPACE:/workspace aquasec/trivy:latest image \
                         --exit-code 0 \
                         --format template \
-                        --template "@/contrib/html.tpl" \
+                        --template @/contrib/html.tpl \
                         --output /workspace/trivy-report.html \
-                        ${IMAGE_NAME}
+                        vankorj/finalimage
                         """
                     }
                     archiveArtifacts artifacts: "${env.WORKSPACE}/trivy-report.json,${env.WORKSPACE}/trivy-report.html", allowEmptyArchive: true
