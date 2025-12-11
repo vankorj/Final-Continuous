@@ -41,13 +41,17 @@ pipeline {
 
         stage('SAST - Snyk') {
             steps {
-                snykSecurity failOnIssues: false, severity: 'critical'
+                snykSecurity(
+                    snykInstallation: 'Snyk-installation', // the tool name in Jenkins
+                    snykTokenId: 'synk_id',                  // your Snyk credential
+                    severity: 'critical'
+                )
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('SonarQube-installations') {
+                withSonarQubeEnv('SonarQube-installation') {
                     sh 'sonar-scanner -Dsonar.projectKey=final -Dsonar.sources=.'
                 }
             }
