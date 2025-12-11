@@ -2,14 +2,11 @@ pipeline {
     agent any
 
     environment {
-        // Docker Hub credentials and image info
         DOCKERHUB_CREDENTIALS = 'docker-id'
         IMAGE_NAME = 'vankorj/finalimage'
 
-        // Trivy config
         TRIVY_SEVERITY = "HIGH,CRITICAL"
 
-        // ZAP config
         TARGET_URL = "http://45.79.140.194/"
         REPORT_HTML = "zap_report.html"
         REPORT_JSON = "zap_report.json"
@@ -26,29 +23,20 @@ pipeline {
         stage('SAST-TEST') {
             steps {
                 script {
-                    def snykInstalled = false
-                    try {
-                        tool name: 'Snyk-installations', type: 'io.snyk.jenkins.tools.SnykInstallation'
-                        snykInstalled = true
-                    } catch (err) {
-                        echo "Snyk installation not found. Skipping SAST-TEST."
-                    }
+                    echo "Running Snyk SAST/SCA..."
 
-                    if (snykInstalled) {
-                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                            snykSecurity(
-                                snykInstallation: 'Snyk-installations',
-                                snykTokenId: 'Snyk-API-token',
-                                severity: 'critical'
-                            )
-                        }
+                    catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                        snykSecurity(
+                            snykInstallation: 'Snyk-installation',
+                            snykTokenId: 'Snyk-API-token',
+                            severity: 'critical'
+                        )
                     }
                 }
             }
         }
 
         stage('SonarQube Analysis') {
-            agent any
             steps {
                 script {
                     catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
@@ -56,8 +44,8 @@ pipeline {
                         withSonarQubeEnv('SonarQube-installations') {
                             sh """
                                 ${scannerHome}/bin/sonar-scanner \
-                                -Dsonar.projectKey=gameapp \
-                                -Dsonar.sources=.
+                                -Dsonar.projectKey=final \
+                                -Dsonar.sources=. 
                             """
                         }
                     }
@@ -66,23 +54,22 @@ pipeline {
         }
 
         stage('BUILD-AND-TAG') {
-            agent any
             steps {
                 script {
                     echo "Building Docker image ${IMAGE_NAME}..."
-                    app = docker.build("${IMAGE_NAME}")
+                    def app = docker.build("${IMAGE_NAME}")
                     app.tag("latest")
+                    env.IMAGE_ID = "${IMAGE_NAME}:latest"
                 }
             }
         }
 
         stage('POST-TO-DOCKERHUB') {
-            agent any
             steps {
                 script {
                     echo "Pushing to DockerHub..."
                     docker.withRegistry('https://registry.hub.docker.com', "${DOCKERHUB_CREDENTIALS}") {
-                        app.push("latest")
+                        docker.image("${IMAGE_NAME}:latest").push()
                     }
                 }
             }
@@ -91,9 +78,9 @@ pipeline {
         stage("SECURITY-IMAGE-SCANNER") {
             steps {
                 script {
-                    echo "Running Trivy scan..."
+                    echo "Running Trivy vulnerability scan..."
+
                     catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                        // JSON report
                         sh """
                             docker run --rm -v \$(pwd):/workspace aquasec/trivy:latest image \
                             --exit-code 0 \
@@ -102,7 +89,7 @@ pipeline {
                             --severity ${TRIVY_SEVERITY} \
                             ${IMAGE_NAME}
                         """
-                        // HTML report
+
                         sh """
                             docker run --rm -v \$(pwd):/workspace aquasec/trivy:latest image \
                             --exit-code 0 \
@@ -112,6 +99,7 @@ pipeline {
                             ${IMAGE_NAME}
                         """
                     }
+
                     archiveArtifacts artifacts: "trivy-report.json,trivy-report.html", allowEmptyArchive: true
                 }
             }
@@ -121,8 +109,9 @@ pipeline {
             steps {
                 script {
                     catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+
                         if (!fileExists("trivy-report.json")) {
-                            echo "No Trivy report."
+                            echo "No Trivy report found."
                             return
                         }
 
@@ -136,7 +125,7 @@ pipeline {
                             returnStdout: true
                         ).trim()
 
-                        echo "Trivy Findings Summary - HIGH: ${highCount}, CRITICAL: ${criticalCount}"
+                        echo "Trivy Summary → HIGH: ${highCount}, CRITICAL: ${criticalCount}"
                     }
                 }
             }
@@ -145,8 +134,10 @@ pipeline {
         stage('DAST') {
             steps {
                 script {
-                    echo "Running OWASP ZAP..."
+                    echo "Running OWASP ZAP DAST scan..."
+
                     sh "mkdir -p ${REPORT_DIR}"
+
                     catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
                         sh """
                             docker run --rm --user root --network host \
@@ -156,24 +147,23 @@ pipeline {
                             -r ${REPORT_HTML} -J ${REPORT_JSON} || true
                         """
                     }
+
                     archiveArtifacts artifacts: "zap_reports/*", allowEmptyArchive: true
                 }
             }
         }
 
         stage('DEPLOYMENT') {
-            agent any
             steps {
                 script {
-                    echo "Deploying using docker-compose..."
+                    echo "Deploying with docker-compose..."
+
                     catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                        dir("${WORKSPACE}") {
-                            sh """
-                                docker-compose down || true
-                                docker-compose up -d || true
-                                docker ps || true
-                            """
-                        }
+                        sh """
+                            docker-compose down || true
+                            docker-compose up -d || true
+                            docker ps || true
+                        """
                     }
                 }
             }
@@ -182,7 +172,7 @@ pipeline {
 
     post {
         always {
-            // Publish Trivy report
+
             publishHTML(target: [
                 reportName: 'Trivy Image Security Report',
                 reportDir: '.',
@@ -191,7 +181,6 @@ pipeline {
                 allowMissing: true
             ])
 
-            // Publish ZAP report
             publishHTML(target: [
                 reportName: 'OWASP ZAP DAST Report',
                 reportDir: 'zap_reports',
@@ -200,8 +189,9 @@ pipeline {
                 allowMissing: true
             ])
 
-            echo 'Pipeline completed (success or fail).'
+            echo 'Pipeline completed.'
         }
+
         failure {
             echo 'Pipeline failed!'
         }
