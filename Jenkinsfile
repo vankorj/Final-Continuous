@@ -10,7 +10,7 @@ pipeline {
         TRIVY_SEVERITY = "HIGH,CRITICAL"
 
         // ZAP config
-        TARGET_URL = "http://45.79.140.194/"
+        TARGET_URL = "http://172.236.110.30:3000"
         REPORT_HTML = "zap_report.html"
         REPORT_JSON = "zap_report.json"
         ZAP_IMAGE = "ghcr.io/zaproxy/zaproxy:stable"
@@ -180,6 +180,8 @@ pipeline {
                         """
                     }
                     sh 'ls -R zap_reports'
+                    echo "${env.WORKSPACE}"
+                    sh 'pwd'
                     archiveArtifacts artifacts: "zap_reports/**/*", allowEmptyArchive: true
                 }
             }
