@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_CREDENTIALS = credentials('dockerhub-creds') // your DockerHub credential ID
+        DOCKERHUB_CREDENTIALS = credentials('docker-id') // your DockerHub credential ID
         TARGET_URL = "http://localhost:3000" // Set default URL for DAST
     }
 
