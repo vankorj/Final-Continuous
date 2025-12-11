@@ -2,9 +2,9 @@ pipeline {
     agent any
  
     environment {
-        IMAGE_NAME = "vankorj/nodejs-chat-app"
+        IMAGE_NAME = 'vankorj/finalimage'
         TRIVY_SEVERITY = "HIGH,CRITICAL"
-        ZAP_TARGET_URL = "http://45.79.140.194"
+        ZAP_TARGET_URL = "http://172.236.110.30:3000"
     }
  
     stages {
