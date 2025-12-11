@@ -23,14 +23,22 @@ pipeline {
         stage('SAST-TEST') {
             steps {
                 script {
-                    echo "Running Snyk SAST/SCA..."
+                    def snykInstalled = false
+                    try {
+                        tool name: 'Snyk-installations', type: 'io.snyk.jenkins.tools.SnykInstallation'
+                        snykInstalled = true
+                    } catch (err) {
+                        echo "Snyk installation not found. Skipping SAST-TEST."
+                    }
 
-                    catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                        snykSecurity(
-                            snykInstallation: 'Snyk-installation',
-                            snykTokenId: 'Snyk-API-token',
-                            severity: 'critical'
-                        )
+                    if (snykInstalled) {
+                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                            snykSecurity(
+                                snykInstallation: 'Snyk-installations',
+                                snykTokenId: 'Snyk-API-token',
+                                severity: 'critical'
+                            )
+                        }
                     }
                 }
             }
