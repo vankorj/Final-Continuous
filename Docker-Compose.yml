@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  gameapptestauso123:
+    image: finalimage:latest
+    build: .
+    container_name: finalautotest123
+    ports:
+      - "8030:3000"
+    environment:
+      - PORT=3000
+    volumes:
+      - ./app:/app
+    command: ["node", "app.js"]
