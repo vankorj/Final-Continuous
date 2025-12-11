@@ -21,7 +21,7 @@ pipeline {
 
         stage('SAST - Snyk') {
             steps {
-                withCredentials([string(credentialsId: 'snyk-token', variable: 'SNYK_TOKEN')]) {
+                withCredentials([string(credentialsId: 'synk_id', variable: 'SNYK_TOKEN')]) {
                     sh 'snyk auth $SNYK_TOKEN'
                     sh 'snyk test --all-projects'
                 }
