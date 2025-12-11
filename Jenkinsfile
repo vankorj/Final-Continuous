@@ -21,12 +21,14 @@ pipeline {
 
         stage('SAST - Snyk') {
             steps {
-                withCredentials([string(credentialsId: 'synk_id', variable: 'SNYK_TOKEN')]) {
-                    sh 'snyk auth $SNYK_TOKEN'
-                    sh 'snyk test --all-projects'
-                }
+                snykSecurity(
+                    snykInstallation: 'Snyk-installations', // the tool name in Jenkins
+                    snykTokenId: 'synk_id',                  // your Snyk credential
+                    severity: 'critical'
+                )
             }
         }
+
 
         stage('SonarQube Analysis') {
             steps {
