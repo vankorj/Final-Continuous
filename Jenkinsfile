@@ -22,7 +22,7 @@ pipeline {
         stage('SAST - Snyk') {
             steps {
                 snykSecurity(
-                    snykInstallation: 'Snyk-installations', // the tool name in Jenkins
+                    snykInstallation: 'Snyk-installation', // the tool name in Jenkins
                     snykTokenId: 'synk_id',                  // your Snyk credential
                     severity: 'critical'
                 )
