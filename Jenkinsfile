@@ -67,20 +67,24 @@ pipeline {
             }
         }
 
-        stage('Build Docker Image') {
+        stage('BUILD-AND-TAG') {
+            agent any
             steps {
                 script {
-                    sh 'docker build -t vankorj/finalimage .'
-                    sh 'docker tag vankorj/finalimage vankorj/finalimage:latest'
+                    echo "Building Docker image ${IMAGE_NAME}..."
+                    app = docker.build("${IMAGE_NAME}")
+                    app.tag("latest")
                 }
             }
         }
 
-        stage('Push to DockerHub') {
+        stage('POST-TO-DOCKERHUB') {
+            agent any
             steps {
                 script {
-                    docker.withRegistry('https://registry.hub.docker.com', 'docker-id') {
-                        sh 'docker push vankorj/finalimage:latest'
+                    echo "Pushing to DockerHub..."
+                    docker.withRegistry('https://registry.hub.docker.com', "${DOCKERHUB_CREDENTIALS}") {
+                        app.push("latest")
                     }
                 }
             }
