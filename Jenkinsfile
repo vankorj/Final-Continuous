@@ -50,9 +50,19 @@ pipeline {
         }
 
         stage('SonarQube Analysis') {
+            agent any
             steps {
-                withSonarQubeEnv('SonarQube-installation') {
-                    sh 'sonar-scanner -Dsonar.projectKey=final -Dsonar.sources=.'
+                script {
+                    catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                        def scannerHome = tool 'SonarQube-Scanner'
+                        withSonarQubeEnv('SonarQube-installations') {
+                            sh """
+                                ${scannerHome}/bin/sonar-scanner \
+                                -Dsonar.projectKey=gameapp \
+                                -Dsonar.sources=.
+                            """
+                        }
+                    }
                 }
             }
         }
