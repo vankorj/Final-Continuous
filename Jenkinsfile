@@ -111,7 +111,7 @@ pipeline {
                             docker run --rm -v \$(pwd):/workspace aquasec/trivy:latest image \
                             --exit-code 0 \
                             --format json \
-                            --output /workspace/FinalTest/trivy-report.json \
+                            --output /workspace/trivy-report.json \
                             --severity ${TRIVY_SEVERITY} \
                             ${IMAGE_NAME}
                         """
@@ -121,11 +121,11 @@ pipeline {
                             --exit-code 0 \
                             --format template \
                             --template "@/contrib/html.tpl" \
-                            --output /workspace/FinalTest/trivy-report.html \
+                            --output /workspace/trivy-report.html \
                             ${IMAGE_NAME}
                         """
                     }
-                    archiveArtifacts artifacts: "FinalTest/trivy-report.json,FinalTest/trivy-report.html", allowEmptyArchive: true
+                    archiveArtifacts artifacts: "trivy-report.json,trivy-report.html", allowEmptyArchive: true
                 }
             }
         }
@@ -178,7 +178,7 @@ pipeline {
                             -r ${REPORT_HTML} -J ${REPORT_JSON} || true
                         """
                     }
-                    archiveArtifacts artifacts: "FinalTest/zap_reports/*", allowEmptyArchive: true
+                    archiveArtifacts artifacts: "zap_reports/*", allowEmptyArchive: true
                 }
             }
         }
