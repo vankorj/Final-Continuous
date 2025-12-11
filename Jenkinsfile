@@ -125,7 +125,7 @@ pipeline {
                             ${IMAGE_NAME}
                         """
                     }
-
+                    sh 'find . -name "trivy-report.json"'
                     archiveArtifacts artifacts: "trivy-report.json,trivy-report.html", allowEmptyArchive: true
                 }
             }
