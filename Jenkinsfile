@@ -79,7 +79,24 @@ pipeline {
             }
         }
 
- 
+        stage('SonarQube Analysis') {
+            agent any
+            steps {
+                script {
+                    catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                    def scannerHome = tool 'SonarQube-Scanner'
+                        withSonarQubeEnv('SonarQube-installations') {
+                            sh """
+                                ${scannerHome}/bin/sonar-scanner \
+                                -Dsonar.projectKey=FinalTest \
+                                -Dsonar.sources=.
+                            """
+                        }
+                    }
+                }
+            }
+        }
+
         stage("Container Vulnerability Scan (Trivy)") {
             steps {
                 script {
@@ -273,21 +290,5 @@ pipeline {
         }
     }
 
-    stage('SonarQube Analysis') {
-        agent any
-        steps {
-            script {
-                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                def scannerHome = tool 'SonarQube-Scanner'
-                    withSonarQubeEnv('SonarQube-installations') {
-                        sh """
-                            ${scannerHome}/bin/sonar-scanner \
-                            -Dsonar.projectKey=FinalTest \
-                            -Dsonar.sources=.
-                        """
-                    }
-                }
-            }
-        }
-    }
+    
 }
