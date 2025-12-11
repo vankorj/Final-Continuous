@@ -182,7 +182,7 @@ pipeline {
                     sh 'ls -R zap_reports'
                     echo "${env.WORKSPACE}"
                     sh 'pwd'
-                    archiveArtifacts artifacts: "./zap_reports/*", allowEmptyArchive: true
+                    archiveArtifacts artifacts: "${env.WORKSPACE}/zap_reports/*", allowEmptyArchive: true
                 }
             }
         }
