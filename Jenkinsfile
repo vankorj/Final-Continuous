@@ -2,8 +2,19 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_CREDENTIALS = credentials('docker-id') // your DockerHub credential ID
-        TARGET_URL = "http://localhost:3000" // Set default URL for DAST
+        // Docker Hub credentials and image info
+        DOCKERHUB_CREDENTIALS = 'docker-id'
+        IMAGE_NAME = 'vankorj/finalimage'
+
+        // Trivy config
+        TRIVY_SEVERITY = "HIGH,CRITICAL"
+
+        // ZAP config
+        TARGET_URL = "http://45.79.140.194/"
+        REPORT_HTML = "zap_report.html"
+        REPORT_JSON = "zap_report.json"
+        ZAP_IMAGE = "ghcr.io/zaproxy/zaproxy:stable"
+        REPORT_DIR = "${env.WORKSPACE}/zap_reports"
     }
 
     stages {
@@ -153,16 +164,21 @@ pipeline {
             }
         }
 
-        stage('DAST - OWASP ZAP') {
+        stage('DAST') {
             steps {
                 script {
-                    if (env.TARGET_URL) {
-                        echo "Running DAST against ${env.TARGET_URL}"
-                        // Insert ZAP scanning command here, e.g.:
-                        // sh "zap-cli quick-scan --self-contained --start-options '-config api.disablekey=true' ${TARGET_URL}"
-                    } else {
-                        echo "TARGET_URL not set, skipping DAST"
+                    echo "Running OWASP ZAP..."
+                    sh "mkdir -p ${REPORT_DIR}"
+                    catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                        sh """
+                            docker run --rm --user root --network host \
+                            -v ${REPORT_DIR}:/zap/wrk \
+                            -t ${ZAP_IMAGE} zap-baseline.py \
+                            -t ${TARGET_URL} \
+                            -r ${REPORT_HTML} -J ${REPORT_JSON} || true
+                        """
                     }
+                    archiveArtifacts artifacts: "zap_reports/*", allowEmptyArchive: true
                 }
             }
         }
