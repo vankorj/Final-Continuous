@@ -10,7 +10,7 @@ pipeline {
         TRIVY_SEVERITY = "HIGH,CRITICAL"
 
         // ZAP config
-        TARGET_URL = "http://172.236.110.30:3000/"
+        TARGET_URL = "http://172.236.110.30:3000"
         REPORT_HTML = "zap_report.html"
         REPORT_JSON = "zap_report.json"
         ZAP_IMAGE = "ghcr.io/zaproxy/zaproxy:stable"
@@ -19,31 +19,44 @@ pipeline {
 
     stages {
 
-        stage('Cloning Git') {
-            steps { checkout scm }
+        stage('Checkout SCM') {
+            steps {
+                checkout scm
+            }
         }
 
-        stage('SAST-TEST') {
+        stage('Prepare Environment') {
             steps {
                 script {
-                    def snykInstalled = false
-                    try {
-                        tool name: 'Snyk-installation', type: 'io.snyk.jenkins.tools.SnykInstallation'
-                        snykInstalled = true
-                    } catch (err) {
-                        echo "Snyk installation not found. Skipping SAST-TEST."
+                    // Install Node.js if missing
+                    if (!fileExists('/usr/bin/node')) {
+                        sh '''
+                        curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+                        apt-get install -y nodejs
+                        '''
                     }
-
-                    if (snykInstalled) {
-                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                            snykSecurity(
-                                snykInstallation: 'Snyk-installation',
-                                snykTokenId: 'Snyk-API-token',
-                                severity: 'critical'
-                            )
-                        }
+                    
+                    // Install docker-compose if missing
+                    if (!fileExists('/usr/local/bin/docker-compose')) {
+                        sh '''
+                        curl -L "https://github.com/docker/compose/releases/download/v2.23.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+                        chmod +x /usr/local/bin/docker-compose
+                        '''
                     }
+                    
+                    // Print versions
+                    sh 'node -v && npm -v && docker-compose -v'
                 }
+            }
+        }
+
+        stage('SAST - Snyk') {
+            steps {
+                snykSecurity(
+                    snykInstallation: 'Snyk-installation', // the tool name in Jenkins
+                    snykTokenId: 'synk_id',                  // your Snyk credential
+                    severity: 'critical'
+                )
             }
         }
 
@@ -108,10 +121,11 @@ pipeline {
                             --exit-code 0 \
                             --format template \
                             --template "@/contrib/html.tpl" \
-                            --output /workspace/trivy-report.html \
+                            --output "/workspace/trivy-report.html" \
                             ${IMAGE_NAME}
                         """
                     }
+
                     archiveArtifacts artifacts: "trivy-report.json,trivy-report.html", allowEmptyArchive: true
                 }
             }
@@ -121,10 +135,10 @@ pipeline {
             steps {
                 script {
                     catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                        if (!fileExists("trivy-report.json")) {
-                            echo "No Trivy report."
-                            return
-                        }
+                        //if (!fileExists("trivy-report.json")) {
+                        //    echo "No Trivy report."
+                        //    return
+                        //}
 
                         def highCount = sh(
                             script: "grep -o '\"Severity\": \"HIGH\"' trivy-report.json | wc -l",
@@ -138,6 +152,15 @@ pipeline {
 
                         echo "Trivy Findings Summary - HIGH: ${highCount}, CRITICAL: ${criticalCount}"
                     }
+                }
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                script {
+                    sh 'docker-compose down || true'
+                    sh 'docker-compose up -d || true'
                 }
             }
         }
@@ -156,25 +179,10 @@ pipeline {
                             -r ${REPORT_HTML} -J ${REPORT_JSON} || true
                         """
                     }
-                    archiveArtifacts artifacts: "zap_reports/*", allowEmptyArchive: true
-                }
-            }
-        }
-
-        stage('DEPLOYMENT') {
-            agent any
-            steps {
-                script {
-                    echo "Deploying using docker-compose..."
-                    catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                        dir("${WORKSPACE}") {
-                            sh """
-                                docker-compose down || true
-                                docker-compose up -d || true
-                                docker ps || true
-                            """
-                        }
-                    }
+                    sh 'ls -R zap_reports'
+                    echo "${env.WORKSPACE}"
+                    sh 'pwd'
+                    archiveArtifacts artifacts: "zap_reports/**", allowEmptyArchive: true
                 }
             }
         }
@@ -182,28 +190,10 @@ pipeline {
 
     post {
         always {
-            // Publish Trivy report
-            publishHTML(target: [
-                reportName: 'Trivy Image Security Report',
-                reportDir: '.',
-                reportFiles: 'trivy-report.html',
-                alwaysLinkToLastBuild: true,
-                allowMissing: true
-            ])
-
-            // Publish ZAP report
-            publishHTML(target: [
-                reportName: 'OWASP ZAP DAST Report',
-                reportDir: 'zap_reports',
-                reportFiles: 'zap_report.html',
-                alwaysLinkToLastBuild: true,
-                allowMissing: true
-            ])
-
-            echo 'Pipeline completed (success or fail).'
+            echo "Pipeline finished."
         }
         failure {
-            echo 'Pipeline failed!'
+            echo "Pipeline failed!"
         }
     }
 }
