@@ -7,9 +7,6 @@ pipeline {
 
         TRIVY_SEVERITY = "HIGH,CRITICAL"
 
-        TARGET_URL = "http://45.79.140.194/"
-        REPORT_HTML = "zap_report.html"
-        REPORT_JSON = "zap_report.json"
         ZAP_IMAGE = "ghcr.io/zaproxy/zaproxy:stable"
         REPORT_DIR = "${env.WORKSPACE}/zap_reports"
     }
@@ -24,24 +21,9 @@ pipeline {
 
         stage('SAST - Snyk') {
             steps {
-                script {
-                    def snykInstalled = false
-                    try {
-                        tool name: 'Snyk-installations', type: 'io.snyk.jenkins.tools.SnykInstallation'
-                        snykInstalled = true
-                    } catch (err) {
-                        echo "Snyk not configured. Skipping SAST."
-                    }
-
-                    if (snykInstalled) {
-                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                            snykSecurity(
-                                snykInstallation: 'Snyk-installations',
-                                snykTokenId: 'Snyk-API-token',
-                                severity: 'critical'
-                            )
-                        }
-                    }
+                withCredentials([string(credentialsId: 'snyk-token', variable: 'SNYK_TOKEN')]) {
+                    sh 'snyk auth $SNYK_TOKEN'
+                    sh 'snyk test --all-projects'
                 }
             }
         }
@@ -131,27 +113,6 @@ pipeline {
             }
         }
 
-        stage('DAST - OWASP ZAP') {
-            steps {
-                script {
-                    echo "Running OWASP ZAP scan..."
-                    sh "mkdir -p ${REPORT_DIR}"
-
-                    catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                        sh """
-                            docker run --rm --user root --network host \
-                            -v ${REPORT_DIR}:/zap/wrk \
-                            -t ${ZAP_IMAGE} zap-baseline.py \
-                            -t ${TARGET_URL} \
-                            -r ${REPORT_HTML} -J ${REPORT_JSON} || true
-                        """
-                    }
-
-                    archiveArtifacts artifacts: "zap_reports/*", allowEmptyArchive: true
-                }
-            }
-        }
-
         stage('Deploy') {
             steps {
                 script {
@@ -160,9 +121,37 @@ pipeline {
                         sh """
                             docker-compose down || true
                             docker-compose up -d || true
-                            docker ps || true
+                        """
+
+                        // Wait for the main service to be healthy
+                        sleep 10  // Adjust if your app takes longer to start
+
+                        // Fetch container IP dynamically
+                        env.TARGET_URL = sh(script: "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' your_service_name", returnStdout: true).trim()
+                        echo "DAST will target: ${env.TARGET_URL}"
+                    }
+                }
+            }
+        }
+
+        stage('DAST') {
+            steps {
+                script {
+                    echo "Running OWASP ZAP against ${TARGET_URL}..."
+                    sh "mkdir -p ${WORKSPACE}/zap_reports"
+
+                    catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                        sh """
+                            docker run --rm --user root \
+                            --network host \
+                            -v ${WORKSPACE}/zap_reports:/zap/wrk \
+                            -t ${ZAP_IMAGE} zap-baseline.py \
+                            -t http://${TARGET_URL}:80 \
+                            -r zap_report.html -J zap_report.json || true
                         """
                     }
+
+                    archiveArtifacts artifacts: "zap_reports/*", allowEmptyArchive: true
                 }
             }
         }
