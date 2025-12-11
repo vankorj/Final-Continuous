@@ -14,12 +14,6 @@ pipeline {
         REPORT_DIR = "${env.WORKSPACE}/zap_reports"
     }
 
-    options {
-        timestamps()
-        ansiColor('xterm')
-        skipDefaultCheckout()
-    }
-
     stages {
 
         stage('Checkout') {
